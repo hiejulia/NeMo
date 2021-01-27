@@ -218,13 +218,18 @@ class NLPModel(ModelPT):
             # and are non-trivial
 
             model = LightningDistributedDataParallel(
-                model, device_ids, output_device=device_ids[0], process_group=app_state.data_parallel_group
+                model,
+                device_ids,
+                output_device=device_ids[0],
+                process_group=app_state.data_parallel_group,
+                find_unused_parameters=True,
             )
             return model
 
         else:
-            logging.info("Did not detect model parallel using LightningModule.configure_ddp")
-            return LightningModule.configure_ddp(self, model, device_ids)
+            logging.info('overriding ddp to set find_unused_parameters to True')
+            model = LightningDistributedDataParallel(model, device_ids=device_ids, find_unused_parameters=True)
+            return model
 
     def _clip_gradients(self, optimizer, clip_val=None):
         """ Override of PTL Gradient Clipping.
@@ -310,3 +315,6 @@ class NLPModel(ModelPT):
                 ):
                     # finish megatron-lm initialization
                     self.bert_model._lazy_init_fn()
+
+                # Update PTL trainer to use our configure_ddp
+                self._trainer.accelerator_backend.ddp_plugin.configure_ddp = self.configure_ddp
